@@ -1,18 +1,19 @@
 import { Card } from "./ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { PieChart as PieChartIcon } from "lucide-react";
+import type { SourcePoint } from "../lib/smartGrid";
 
-const data = [
-  { name: "Solar", value: 28, color: "#fbbf24" },
-  { name: "Wind", value: 14, color: "#22d3ee" },
-  { name: "Hydro", value: 8, color: "#60a5fa" },
-  { name: "Natural Gas", value: 35, color: "#94a3b8" },
-  { name: "Coal", value: 15, color: "#64748b" },
-];
+type EnergySourceDistributionProps = {
+  data: SourcePoint[];
+  renewableShare: number;
+};
 
-const COLORS = data.map(d => d.color);
+export function EnergySourceDistribution({
+  data,
+  renewableShare,
+}: EnergySourceDistributionProps) {
+  const colors = data.map((entry) => entry.color);
 
-export function EnergySourceDistribution() {
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
@@ -35,7 +36,7 @@ export function EnergySourceDistribution() {
             dataKey="value"
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
           <Tooltip />
@@ -44,14 +45,19 @@ export function EnergySourceDistribution() {
       </ResponsiveContainer>
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="bg-green-50 p-3 rounded-lg">
-          <p className="text-sm text-slate-600">Renewable</p>
-          <p className="text-2xl text-green-600">50%</p>
+          <p className="text-sm text-slate-600">Renewable Share</p>
+          <p className="text-2xl text-green-600">{renewableShare}%</p>
         </div>
         <div className="bg-slate-100 p-3 rounded-lg">
-          <p className="text-sm text-slate-600">Fossil Fuels</p>
-          <p className="text-2xl text-slate-600">50%</p>
+          <p className="text-sm text-slate-600">Grid Supply Share</p>
+          <p className="text-2xl text-slate-600">{(100 - renewableShare).toFixed(2)}%</p>
         </div>
       </div>
+      {data.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">
+          Distribution is calculated from the cumulative energy already stored in the local database.
+        </p>
+      ) : null}
     </Card>
   );
 }
