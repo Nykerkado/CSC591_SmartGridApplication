@@ -4,18 +4,20 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
-import { Separator } from "../components/ui/separator";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Input } from "../components/ui/input";
 import {
   Zap,
   TrendingUp,
   BarChart3,
   PieChart,
   Activity,
-  Send,
   LogOut,
   Filter,
+  Database,
+  AlertTriangle,
+  DollarSign,
+  Flame,
+  TriangleAlert,
 } from "lucide-react";
 import { PowerConsumptionChart } from "../components/PowerConsumptionChart";
 import { RenewableEnergyChart } from "../components/RenewableEnergyChart";
@@ -23,6 +25,7 @@ import { GridLoadChart } from "../components/GridLoadChart";
 import { EnergySourceDistribution } from "../components/EnergySourceDistribution";
 import { ChatInterface } from "../components/ChatInterface";
 import { SimulationControls } from "../components/SimulationControls";
+import { useSmartGridSimulation } from "../hooks/useSmartGridSimulation";
 
 type ChartType = "power-consumption" | "renewable-energy" | "grid-load" | "energy-distribution";
 
@@ -42,6 +45,7 @@ export function Dashboard() {
     "power-consumption",
     "renewable-energy",
   ]);
+  const simulation = useSmartGridSimulation();
 
   const handleChartToggle = (chartId: ChartType) => {
     setSelectedCharts((prev) =>
@@ -131,7 +135,112 @@ export function Dashboard() {
           <ScrollArea className="h-full">
             <div className="p-6 space-y-6">
               {/* Simulation Controls */}
-              <SimulationControls />
+              <SimulationControls
+                error={simulation.error}
+                fileName={simulation.fileName}
+                isUploading={simulation.isUploading}
+                onPause={simulation.pause}
+                onReset={simulation.reset}
+                onResume={simulation.resume}
+                onStart={simulation.start}
+                onUpload={simulation.uploadFile}
+                processedCount={simulation.processedCount}
+                progress={simulation.progress}
+                status={simulation.status}
+                totalRows={simulation.totalRows}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <Database className="size-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-slate-600">Processed Records</p>
+                      <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="size-5 text-red-600" />
+                    <div>
+                      <p className="text-sm text-slate-600">Overload Events</p>
+                      <p className="text-2xl">{simulation.stats.overloadEvents.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <DollarSign className="size-5 text-emerald-600" />
+                    <div>
+                      <p className="text-sm text-slate-600">Latest Electricity Price</p>
+                      <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <Card className="p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Flame className="size-5 text-red-600" />
+                    <div>
+                      <h3>Overload Timeline</h3>
+                      <p className="text-sm text-slate-600">
+                        Total: {simulation.stats.overloadEvents.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-40">
+                    <div className="space-y-2">
+                      {simulation.stats.overloadTimestamps.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          No overload events detected yet.
+                        </p>
+                      ) : (
+                        simulation.stats.overloadTimestamps.map((timestamp, index) => (
+                          <div
+                            key={`${timestamp}-${index}`}
+                            className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700"
+                          >
+                            {timestamp}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </Card>
+
+                <Card className="p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <TriangleAlert className="size-5 text-orange-500" />
+                    <div>
+                      <h3>Transformer Fault Timeline</h3>
+                      <p className="text-sm text-slate-600">
+                        Total: {simulation.stats.transformerFaults.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-40">
+                    <div className="space-y-2">
+                      {simulation.stats.transformerFaultTimestamps.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          No transformer faults detected yet.
+                        </p>
+                      ) : (
+                        simulation.stats.transformerFaultTimestamps.map((timestamp, index) => (
+                          <div
+                            key={`${timestamp}-${index}`}
+                            className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-700"
+                          >
+                            {timestamp}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </Card>
+              </div>
 
               {selectedCharts.length === 0 ? (
                 <Card className="p-12 text-center">
@@ -144,14 +253,19 @@ export function Dashboard() {
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {selectedCharts.includes("power-consumption") && (
-                    <PowerConsumptionChart />
+                    <PowerConsumptionChart data={simulation.powerConsumptionData} />
                   )}
                   {selectedCharts.includes("renewable-energy") && (
-                    <RenewableEnergyChart />
+                    <RenewableEnergyChart data={simulation.renewableEnergyData} />
                   )}
-                  {selectedCharts.includes("grid-load") && <GridLoadChart />}
+                  {selectedCharts.includes("grid-load") && (
+                    <GridLoadChart data={simulation.gridLoadData} />
+                  )}
                   {selectedCharts.includes("energy-distribution") && (
-                    <EnergySourceDistribution />
+                    <EnergySourceDistribution
+                      data={simulation.energyDistributionData}
+                      renewableShare={simulation.stats.renewableShare}
+                    />
                   )}
                 </div>
               )}

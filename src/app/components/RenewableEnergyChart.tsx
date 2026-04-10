@@ -1,18 +1,13 @@
 import { Card } from "./ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp } from "lucide-react";
+import type { RenewablePoint } from "../lib/smartGrid";
 
-const data = [
-  { date: "Mon", solar: 850, wind: 420, hydro: 300 },
-  { date: "Tue", solar: 920, wind: 380, hydro: 300 },
-  { date: "Wed", solar: 880, wind: 450, hydro: 310 },
-  { date: "Thu", solar: 950, wind: 410, hydro: 295 },
-  { date: "Fri", solar: 900, wind: 480, hydro: 305 },
-  { date: "Sat", solar: 870, wind: 520, hydro: 300 },
-  { date: "Sun", solar: 930, wind: 490, hydro: 310 },
-];
+type RenewableEnergyChartProps = {
+  data: RenewablePoint[];
+};
 
-export function RenewableEnergyChart() {
+export function RenewableEnergyChart({ data }: RenewableEnergyChartProps) {
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
@@ -31,9 +26,13 @@ export function RenewableEnergyChart() {
           <Legend />
           <Area type="monotone" dataKey="solar" stackId="1" stroke="#f59e0b" fill="#fbbf24" name="Solar" />
           <Area type="monotone" dataKey="wind" stackId="1" stroke="#06b6d4" fill="#22d3ee" name="Wind" />
-          <Area type="monotone" dataKey="hydro" stackId="1" stroke="#3b82f6" fill="#60a5fa" name="Hydro" />
         </AreaChart>
       </ResponsiveContainer>
+      {data.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">
+          Renewable totals will accumulate here as each CSV row is processed.
+        </p>
+      ) : null}
     </Card>
   );
 }
