@@ -50,6 +50,7 @@ export type RenewablePoint = {
 
 export type GridLoadPoint = {
   hour: string;
+  timestamp: string;
   load: number;
   capacity: number;
 };
@@ -179,22 +180,34 @@ export function buildRenewableEnergyData(records: SmartGridRecord[]): RenewableP
 }
 
 export function buildGridLoadData(records: SmartGridRecord[]): GridLoadPoint[] {
-  const hourlyTotals = new Map<string, { load: number; capacity: number; count: number }>();
+  const recentRecords = records.slice(-32);
+  const hourlyTotals = new Map<
+    string,
+    { hour: string; timestamp: string; load: number; capacity: number; count: number }
+  >();
 
-  records.forEach((record) => {
-    const hour = format(parseTimestamp(record.timestamp), "ha").toLowerCase();
-    const current = hourlyTotals.get(hour) ?? { load: 0, capacity: 0, count: 0 };
+  recentRecords.forEach((record) => {
+    const parsedTimestamp = parseTimestamp(record.timestamp);
+    const bucketKey = format(parsedTimestamp, "yyyy-MM-dd HH:00");
+    const current = hourlyTotals.get(bucketKey) ?? {
+      hour: format(parsedTimestamp, "MMM d HH:00"),
+      timestamp: record.timestamp,
+      load: 0,
+      capacity: 0,
+      count: 0,
+    };
 
     current.load += record.powerConsumption;
     current.capacity += record.solarPower + record.windPower + record.gridSupply;
     current.count += 1;
-    hourlyTotals.set(hour, current);
+    hourlyTotals.set(bucketKey, current);
   });
 
   return Array.from(hourlyTotals.entries())
     .slice(-8)
-    .map(([hour, totals]) => ({
-      hour,
+    .map(([, totals]) => ({
+      hour: totals.hour,
+      timestamp: totals.timestamp,
       load: Number((totals.load / totals.count).toFixed(2)),
       capacity: Number((totals.capacity / totals.count).toFixed(2)),
     }));
