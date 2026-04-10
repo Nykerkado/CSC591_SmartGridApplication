@@ -1,18 +1,13 @@
 import { Card } from "./ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { BarChart3 } from "lucide-react";
+import type { GridLoadPoint } from "../lib/smartGrid";
 
-const data = [
-  { hour: "6am", load: 2100, capacity: 5000 },
-  { hour: "9am", load: 3200, capacity: 5000 },
-  { hour: "12pm", load: 3800, capacity: 5000 },
-  { hour: "3pm", load: 3500, capacity: 5000 },
-  { hour: "6pm", load: 4200, capacity: 5000 },
-  { hour: "9pm", load: 3900, capacity: 5000 },
-  { hour: "12am", load: 2400, capacity: 5000 },
-];
+type GridLoadChartProps = {
+  data: GridLoadPoint[];
+};
 
-export function GridLoadChart() {
+export function GridLoadChart({ data }: GridLoadChartProps) {
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
@@ -33,6 +28,11 @@ export function GridLoadChart() {
           <Bar dataKey="capacity" fill="#e9d5ff" name="Total Capacity" />
         </BarChart>
       </ResponsiveContainer>
+      {data.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">
+          Grid load analysis updates as the stream builds hourly averages.
+        </p>
+      ) : null}
     </Card>
   );
 }
