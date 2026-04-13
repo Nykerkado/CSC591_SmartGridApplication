@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { buildAssistantContext } from "../lib/assistantContext";
 import {
   appendRecords,
   clearSimulationDatabase,
@@ -29,6 +30,7 @@ export function useSmartGridSimulation() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [chatSessionKey, setChatSessionKey] = useState(0);
   const processedCountRef = useRef(0);
   const rowsRef = useRef<SmartGridRecord[]>([]);
   const rawCsvRef = useRef("");
@@ -128,6 +130,7 @@ export function useSmartGridSimulation() {
   async function uploadFile(file: File) {
     setIsUploading(true);
     setError("");
+    setChatSessionKey((current) => current + 1);
 
     try {
       const rawCsv = await file.text();
@@ -189,6 +192,7 @@ export function useSmartGridSimulation() {
   }
 
   async function reset() {
+    setChatSessionKey((current) => current + 1);
     setStatus("idle");
     setUploadedRows([]);
     setProcessedRows([]);
@@ -219,8 +223,20 @@ export function useSmartGridSimulation() {
     [processedRows]
   );
   const stats = useMemo(() => getSimulationStats(processedRows), [processedRows]);
+  const assistantContext = useMemo(
+    () =>
+      buildAssistantContext({
+        fileName,
+        processedRows,
+        status,
+        totalRows: uploadedRows.length,
+      }),
+    [fileName, processedRows, status, uploadedRows.length]
+  );
 
   return {
+    assistantContext,
+    chatSessionKey,
     error,
     fileName,
     gridLoadData,
