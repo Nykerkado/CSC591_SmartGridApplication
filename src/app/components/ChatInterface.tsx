@@ -1,104 +1,215 @@
-import { useState, useRef, useEffect } from "react";
-import { Card } from "./ui/card";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
-import { Send, Bot, User, Sparkles } from "lucide-react";
+import { Bot, Send, Sparkles, User } from "lucide-react";
+import { queryChatAssistant } from "../lib/chatClient";
+import {
+  DASHBOARD_ROLE_LABELS,
+  type AssistantContext,
+  type ChatHistoryMessage,
+  type ChatQueryResponse,
+  type DashboardRole,
+} from "../../shared/chat";
+
+type ChatInterfaceProps = {
+  assistantContext: AssistantContext;
+  hasUploadedCsv: boolean;
+  isUploading?: boolean;
+  role: DashboardRole;
+  sessionKey: number;
+};
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  followUps?: string[];
+  grounding?: string[];
+  unsupportedReason?: string;
 };
 
-const mockResponses = [
-  "Based on the current grid data, renewable energy is contributing approximately 42% of total power generation, showing a 15% increase from last month.",
-  "The grid load shows peak demand between 6-9 PM. I recommend scheduling maintenance during low-demand hours (2-5 AM) to minimize disruption.",
-  "Historical trends indicate that solar output peaks at 1 PM, while wind generation is most consistent between 8 PM and 6 AM. This complementary pattern helps stabilize the grid.",
-  "Current power consumption is within normal parameters. However, I notice a slight increase in demand from the industrial sector, which may require capacity adjustments.",
-  "The renewable energy mix shows: Solar 28%, Wind 14%, Hydro 8%. Fossil fuels currently account for 50% of generation. Setting targets to increase renewables would improve sustainability.",
+const defaultSuggestedQuestions = [
+  "What is the current renewable share?",
+  "When is peak demand so far?",
+  "What is the latest electricity price?",
+  "How many overload events have occurred?",
+  "What is the current minimum headroom?",
+  "How are solar and wind performing?",
 ];
 
-const suggestedQuestions = [
-  "What's the current renewable energy percentage?",
-  "When is peak demand today?",
-  "How is solar performing?",
-  "Show grid capacity status",
-  "Compare renewables vs fossil fuels",
-  "What are the energy trends?",
-];
+function createWelcomeMessage(role: DashboardRole): Message {
+  return {
+    id: "welcome",
+    role: "assistant",
+    content: `I’m your grounded ${DASHBOARD_ROLE_LABELS[role]} assistant. I only answer from the uploaded smart-grid analytics shown in this dashboard.`,
+    timestamp: new Date(),
+    followUps: defaultSuggestedQuestions.slice(0, 3),
+  };
+}
 
-export function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hello! I'm your Smart Grid AI Assistant. Ask me anything about grid conditions, energy trends, or renewable contributions.",
-      timestamp: new Date(),
-    },
-  ]);
+function createFallbackMessage(content: string): Message {
+  return {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content,
+    timestamp: new Date(),
+    followUps: defaultSuggestedQuestions.slice(0, 2),
+  };
+}
+
+function toHistory(messages: Message[]): ChatHistoryMessage[] {
+  return messages
+    .filter((message) => message.id !== "welcome")
+    .slice(-6)
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+}
+
+function toAssistantMessage(response: ChatQueryResponse): Message {
+  return {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content: response.answer,
+    timestamp: new Date(),
+    followUps: response.followUps,
+    grounding: response.grounding,
+    unsupportedReason: response.unsupportedReason,
+  };
+}
+
+export function ChatInterface({
+  assistantContext,
+  hasUploadedCsv,
+  isUploading = false,
+  role,
+  sessionKey,
+}: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<Message[]>(() => [createWelcomeMessage(role)]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [suggestedQuestions, setSuggestedQuestions] = useState(defaultSuggestedQuestions);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const sendMessage = (content: string) => {
-    if (!content.trim()) return;
+  useEffect(() => {
+    requestGenerationRef.current += 1;
+    setMessages([createWelcomeMessage(role)]);
+    setInput("");
+    setIsTyping(false);
+    setShowSuggestions(true);
+    setSuggestedQuestions(defaultSuggestedQuestions);
+  }, [role, sessionKey]);
 
+  const assistantNote = useMemo(() => {
+    if (!hasUploadedCsv || isUploading) {
+      return "Upload a CSV to enable grounded Q&A.";
+    }
+
+    if (assistantContext.meta.processedCount === 0) {
+      return `CSV uploaded. Start the simulation to answer questions from the processed data.`;
+    }
+
+    if (assistantContext.meta.processedCount < assistantContext.meta.totalRows) {
+      return `Answers are based on ${assistantContext.meta.processedCount.toLocaleString()} of ${assistantContext.meta.totalRows.toLocaleString()} processed rows through ${assistantContext.meta.latestTimestamp}.`;
+    }
+
+    return `Answers are based on the full processed dataset through ${assistantContext.meta.latestTimestamp}.`;
+  }, [assistantContext.meta, hasUploadedCsv, isUploading]);
+
+  const inputPlaceholder = hasUploadedCsv
+    ? "Ask about renewable share, price, load, faults, or trends..."
+    : "Upload a CSV to enable grounded Q&A";
+
+  const sendMessage = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed || isTyping || isUploading || !hasUploadedCsv) {
+      return;
+    }
+
+    const generation = requestGenerationRef.current;
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       role: "user",
-      content: content,
+      content: trimmed,
       timestamp: new Date(),
     };
+    const historySnapshot = toHistory(messages);
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((current) => [...current, userMessage]);
     setInput("");
     setIsTyping(true);
     setShowSuggestions(false);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: mockResponses[Math.floor(Math.random() * mockResponses.length)],
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsTyping(false);
-    }, 1500);
+    try {
+      const response = await queryChatAssistant({
+        role,
+        question: trimmed,
+        history: historySnapshot,
+        context: assistantContext,
+      });
+
+      if (generation !== requestGenerationRef.current) {
+        return;
+      }
+
+      const assistantMessage = toAssistantMessage(response);
+      setMessages((current) => [...current, assistantMessage]);
+      setSuggestedQuestions(
+        response.followUps.length > 0 ? response.followUps : defaultSuggestedQuestions
+      );
+    } catch (error) {
+      if (generation !== requestGenerationRef.current) {
+        return;
+      }
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The assistant is temporarily unavailable. Please try again.";
+      setMessages((current) => [...current, createFallbackMessage(message)]);
+      setSuggestedQuestions(defaultSuggestedQuestions);
+    } finally {
+      if (generation === requestGenerationRef.current) {
+        setIsTyping(false);
+      }
+    }
   };
 
   const handleSend = () => {
-    sendMessage(input);
+    void sendMessage(input);
   };
 
   const handleSuggestedQuestion = (question: string) => {
-    sendMessage(question);
+    void sendMessage(question);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
       handleSend();
     }
   };
 
   return (
     <aside className="w-96 bg-white border-l flex flex-col">
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="p-4 border-b space-y-3">
+        <div className="flex items-center gap-2">
           <Bot className="size-5 text-blue-600" />
-          <h2 className="text-lg">AI Assistant</h2>
+          <h2 className="text-lg">Grounded AI Assistant</h2>
         </div>
-        <p className="text-sm text-slate-600">Ask questions about grid analytics</p>
+        <p className="text-sm text-slate-600">Ask light questions about the uploaded grid analytics.</p>
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          {assistantNote}
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
@@ -106,15 +217,11 @@ export function ChatInterface() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex gap-3 ${
-                message.role === "user" ? "flex-row-reverse" : ""
-              }`}
+              className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : ""}`}
             >
               <div
                 className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.role === "user"
-                    ? "bg-blue-600"
-                    : "bg-slate-200"
+                  message.role === "user" ? "bg-blue-600" : "bg-slate-200"
                 }`}
               >
                 {message.role === "user" ? (
@@ -123,13 +230,10 @@ export function ChatInterface() {
                   <Bot className="size-5 text-slate-700" />
                 )}
               </div>
-              <div
-                className={`flex-1 ${
-                  message.role === "user" ? "text-right" : ""
-                }`}
-              >
+
+              <div className={`flex-1 ${message.role === "user" ? "text-right" : ""}`}>
                 <div
-                  className={`inline-block p-3 rounded-lg ${
+                  className={`inline-block max-w-full p-3 rounded-lg ${
                     message.role === "user"
                       ? "bg-blue-600 text-white"
                       : "bg-slate-100 text-slate-900"
@@ -137,6 +241,36 @@ export function ChatInterface() {
                 >
                   <p className="text-sm">{message.content}</p>
                 </div>
+
+                {message.role === "assistant" && message.grounding?.length ? (
+                  <div className="mt-2 space-y-1 text-left">
+                    {message.grounding.map((item) => (
+                      <p key={item} className="text-xs text-slate-500">
+                        {item}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+
+                {message.role === "assistant" && message.unsupportedReason ? (
+                  <p className="mt-2 text-xs text-amber-700 text-left">{message.unsupportedReason}</p>
+                ) : null}
+
+                {message.role === "assistant" && message.followUps?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {message.followUps.map((question) => (
+                      <button
+                        key={`${message.id}-${question}`}
+                        onClick={() => handleSuggestedQuestion(question)}
+                        disabled={isTyping || isUploading || !hasUploadedCsv}
+                        className="text-xs bg-white border border-blue-200 hover:bg-blue-50 text-blue-700 px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
                 <p className="text-xs text-slate-500 mt-1">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: "2-digit",
@@ -147,33 +281,42 @@ export function ChatInterface() {
             </div>
           ))}
 
-          {isTyping && (
+          {isTyping ? (
             <div className="flex gap-3" key="typing-indicator">
               <div className="size-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
                 <Bot className="size-5 text-slate-700" />
               </div>
               <div className="bg-slate-100 p-3 rounded-lg">
                 <div className="flex gap-1">
-                  <div className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <div
+                    className="size-2 bg-slate-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <div
+                    className="size-2 bg-slate-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <div
+                    className="size-2 bg-slate-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {showSuggestions && (
+          {showSuggestions ? (
             <div className="space-y-2" key="suggestions">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Sparkles className="size-3" />
-                <span>Suggested questions</span>
+                <span>Suggested grounded questions</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {suggestedQuestions.map((question, index) => (
+                {suggestedQuestions.map((question) => (
                   <button
-                    key={index}
+                    key={question}
                     onClick={() => handleSuggestedQuestion(question)}
-                    disabled={isTyping}
+                    disabled={isTyping || isUploading || !hasUploadedCsv}
                     className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
                   >
                     {question}
@@ -181,14 +324,14 @@ export function ChatInterface() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
       <div className="p-4 border-t space-y-2">
-        {!showSuggestions && (
+        {!showSuggestions ? (
           <Button
             variant="ghost"
             size="sm"
@@ -198,22 +341,26 @@ export function ChatInterface() {
             <Sparkles className="size-3 mr-2" />
             Show suggested questions
           </Button>
-        )}
+        ) : null}
+
         <div className="flex gap-2">
           <Input
-            placeholder="Ask about grid data, trends, insights..."
+            placeholder={inputPlaceholder}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
             className="flex-1"
+            disabled={!hasUploadedCsv || isTyping || isUploading}
           />
-          <Button onClick={handleSend} disabled={!input.trim() || isTyping}>
+          <Button
+            onClick={handleSend}
+            disabled={!input.trim() || !hasUploadedCsv || isTyping || isUploading}
+          >
             <Send className="size-4" />
           </Button>
         </div>
-        <p className="text-xs text-slate-500">
-          Press Enter to send, Shift+Enter for new line
-        </p>
+
+        <p className="text-xs text-slate-500">Press Enter to send. Answers stay grounded in the current dataset.</p>
       </div>
     </aside>
   );

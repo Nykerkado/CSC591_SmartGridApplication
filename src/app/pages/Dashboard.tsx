@@ -26,6 +26,7 @@ import { EnergySourceDistribution } from "../components/EnergySourceDistribution
 import { ChatInterface } from "../components/ChatInterface";
 import { SimulationControls } from "../components/SimulationControls";
 import { useSmartGridSimulation } from "../hooks/useSmartGridSimulation";
+import { DASHBOARD_ROLE_LABELS, type DashboardRole } from "../../shared/chat";
 
 type ChartType = "power-consumption" | "renewable-energy" | "grid-load" | "energy-distribution";
 
@@ -39,7 +40,11 @@ const availableCharts = [
 export function Dashboard() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const role = searchParams.get("role") || "grid-operator";
+  const requestedRole = searchParams.get("role");
+  const role: DashboardRole =
+    requestedRole && requestedRole in DASHBOARD_ROLE_LABELS
+      ? (requestedRole as DashboardRole)
+      : "grid-operator";
 
   const [selectedCharts, setSelectedCharts] = useState<ChartType[]>([
     "power-consumption",
@@ -55,15 +60,6 @@ export function Dashboard() {
     );
   };
 
-  const getRoleTitle = (roleId: string) => {
-    const titles: Record<string, string> = {
-      "grid-operator": "Grid Operator",
-      "energy-analyst": "Energy Analyst",
-      "system-admin": "System Administrator",
-    };
-    return titles[roleId] || "User";
-  };
-
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       {/* Header */}
@@ -72,7 +68,7 @@ export function Dashboard() {
           <Zap className="size-6 text-blue-600" />
           <div>
             <h1 className="text-xl">Smart Grid Analytics</h1>
-            <p className="text-sm text-slate-600">{getRoleTitle(role)}</p>
+            <p className="text-sm text-slate-600">{DASHBOARD_ROLE_LABELS[role]}</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={() => navigate("/")}>
@@ -274,7 +270,13 @@ export function Dashboard() {
         </main>
 
         {/* Right Sidebar - Chat Interface */}
-        <ChatInterface />
+        <ChatInterface
+          assistantContext={simulation.assistantContext}
+          hasUploadedCsv={simulation.totalRows > 0}
+          isUploading={simulation.isUploading}
+          role={role}
+          sessionKey={simulation.chatSessionKey}
+        />
       </div>
     </div>
   );
