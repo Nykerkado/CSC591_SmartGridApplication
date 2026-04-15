@@ -200,8 +200,8 @@ export function ChatInterface({
   };
 
   return (
-    <aside className="w-96 bg-white border-l flex flex-col">
-      <div className="p-4 border-b space-y-3">
+    <aside className="w-96 shrink-0 min-h-0 bg-white border-l flex flex-col overflow-hidden">
+      <div className="shrink-0 p-4 border-b space-y-3">
         <div className="flex items-center gap-2">
           <Bot className="size-5 text-blue-600" />
           <h2 className="text-lg">Grounded AI Assistant</h2>
@@ -212,7 +212,7 @@ export function ChatInterface({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-4">
           {messages.map((message) => (
             <div
@@ -330,7 +330,7 @@ export function ChatInterface({
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t space-y-2">
+      <div className="shrink-0 p-4 border-t space-y-2">
         {!showSuggestions ? (
           <Button
             variant="ghost"

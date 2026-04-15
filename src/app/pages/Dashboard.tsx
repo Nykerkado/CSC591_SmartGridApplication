@@ -61,7 +61,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
+    <div className="h-screen flex flex-col bg-slate-50 overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -77,9 +77,9 @@ export function Dashboard() {
         </Button>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Left Sidebar - Chart Filters */}
-        <aside className="w-64 bg-white border-r flex flex-col">
+        <aside className="w-64 shrink-0 min-h-0 bg-white border-r flex flex-col overflow-hidden">
           <div className="p-4 border-b">
             <div className="flex items-center gap-2 mb-2">
               <Filter className="size-5 text-slate-600" />
@@ -88,7 +88,7 @@ export function Dashboard() {
             <p className="text-sm text-slate-600">Choose graphs to display</p>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-4">
               {availableCharts.map((chart) => {
                 const Icon = chart.icon;
@@ -127,8 +127,8 @@ export function Dashboard() {
         </aside>
 
         {/* Main Content - Charts */}
-        <main className="flex-1 overflow-auto">
-          <ScrollArea className="h-full">
+        <main className="flex-1 min-w-0 min-h-0 overflow-hidden">
+          <ScrollArea className="h-full min-h-0">
             <div className="p-6 space-y-6">
               {/* Simulation Controls */}
               <SimulationControls
