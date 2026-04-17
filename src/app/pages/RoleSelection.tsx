@@ -69,7 +69,7 @@ export function RoleSelection() {
             return (
               <Card
                 key={role.id}
-                className="p-6 hover:shadow-lg transition-shadow cursor-pointer group"
+                className="p-6 hover:shadow-lg transition-shadow cursor-pointer group flex flex-col"
                 onClick={() => handleRoleSelect(role.id)}
               >
                 <div
@@ -81,7 +81,7 @@ export function RoleSelection() {
                 <p className="text-slate-600 text-sm mb-6">
                   {role.description}
                 </p>
-                <Button className="w-full" variant="outline">
+                <Button className="w-full mt-auto" variant="outline">
                   Select Role
                 </Button>
               </Card>

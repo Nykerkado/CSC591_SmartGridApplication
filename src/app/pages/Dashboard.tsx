@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -18,24 +18,47 @@ import {
   DollarSign,
   Flame,
   TriangleAlert,
+  ShieldAlert,
 } from "lucide-react";
 import { PowerConsumptionChart } from "../components/PowerConsumptionChart";
 import { RenewableEnergyChart } from "../components/RenewableEnergyChart";
 import { GridLoadChart } from "../components/GridLoadChart";
 import { EnergySourceDistribution } from "../components/EnergySourceDistribution";
+import { FluctuationChart } from "../components/FluctuationChart";
+import { RiskIndexChart } from "../components/RiskIndexChart";
 import { ChatInterface } from "../components/ChatInterface";
 import { SimulationControls } from "../components/SimulationControls";
 import { useSmartGridSimulation } from "../hooks/useSmartGridSimulation";
 import { DASHBOARD_ROLE_LABELS, type DashboardRole } from "../../shared/chat";
 
-type ChartType = "power-consumption" | "renewable-energy" | "grid-load" | "energy-distribution";
+type ChartType =
+  | "power-consumption"
+  | "renewable-energy"
+  | "grid-load"
+  | "energy-distribution"
+  | "fluctuation"
+  | "risk-index";
 
 const availableCharts = [
   { id: "power-consumption", label: "Power Consumption", icon: Activity },
   { id: "renewable-energy", label: "Renewable Energy", icon: TrendingUp },
   { id: "grid-load", label: "Grid Load", icon: BarChart3 },
   { id: "energy-distribution", label: "Energy Distribution", icon: PieChart },
+  { id: "fluctuation", label: "Voltage Fluctuation", icon: Activity },
+  { id: "risk-index", label: "Risk Index", icon: ShieldAlert },
 ];
+
+const ROLE_DEFAULT_CHARTS: Record<DashboardRole, ChartType[]> = {
+  "grid-operator": ["power-consumption", "renewable-energy", "grid-load"],
+  "energy-analyst": ["power-consumption", "fluctuation", "risk-index"],
+  "system-admin": ["energy-distribution", "renewable-energy", "grid-load"],
+};
+
+const ROLE_AVAILABLE_CHARTS: Record<DashboardRole, ChartType[]> = {
+  "grid-operator": ["power-consumption", "renewable-energy", "grid-load", "energy-distribution"],
+  "energy-analyst": ["power-consumption", "fluctuation", "risk-index", "grid-load"],
+  "system-admin": ["energy-distribution", "renewable-energy", "grid-load", "power-consumption"],
+};
 
 export function Dashboard() {
   const [searchParams] = useSearchParams();
@@ -46,10 +69,14 @@ export function Dashboard() {
       ? (requestedRole as DashboardRole)
       : "grid-operator";
 
-  const [selectedCharts, setSelectedCharts] = useState<ChartType[]>([
-    "power-consumption",
-    "renewable-energy",
-  ]);
+  const [selectedCharts, setSelectedCharts] = useState<ChartType[]>(
+    () => ROLE_DEFAULT_CHARTS[role]
+  );
+
+  useEffect(() => {
+    setSelectedCharts(ROLE_DEFAULT_CHARTS[role]);
+  }, [role]);
+
   const simulation = useSmartGridSimulation();
 
   const handleChartToggle = (chartId: ChartType) => {
@@ -90,27 +117,29 @@ export function Dashboard() {
 
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-4">
-              {availableCharts.map((chart) => {
-                const Icon = chart.icon;
-                return (
-                  <div key={chart.id} className="flex items-start space-x-3">
-                    <Checkbox
-                      id={chart.id}
-                      checked={selectedCharts.includes(chart.id as ChartType)}
-                      onCheckedChange={() => handleChartToggle(chart.id as ChartType)}
-                    />
-                    <div className="flex-1">
-                      <Label
-                        htmlFor={chart.id}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <Icon className="size-4 text-slate-600" />
-                        <span className="text-sm">{chart.label}</span>
-                      </Label>
+              {availableCharts
+                .filter((chart) => ROLE_AVAILABLE_CHARTS[role].includes(chart.id as ChartType))
+                .map((chart) => {
+                  const Icon = chart.icon;
+                  return (
+                    <div key={chart.id} className="flex items-start space-x-3">
+                      <Checkbox
+                        id={chart.id}
+                        checked={selectedCharts.includes(chart.id as ChartType)}
+                        onCheckedChange={() => handleChartToggle(chart.id as ChartType)}
+                      />
+                      <div className="flex-1">
+                        <Label
+                          htmlFor={chart.id}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <Icon className="size-4 text-slate-600" />
+                          <span className="text-sm">{chart.label}</span>
+                        </Label>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </ScrollArea>
 
@@ -119,7 +148,7 @@ export function Dashboard() {
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => setSelectedCharts(availableCharts.map(c => c.id as ChartType))}
+              onClick={() => setSelectedCharts(ROLE_AVAILABLE_CHARTS[role])}
             >
               Select All
             </Button>
@@ -146,97 +175,167 @@ export function Dashboard() {
                 totalRows={simulation.totalRows}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Database className="size-5 text-blue-600" />
-                    <div>
-                      <p className="text-sm text-slate-600">Processed Records</p>
-                      <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+              {/* Role-specific stat cards */}
+              {role === "grid-operator" && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Database className="size-5 text-blue-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Processed Records</p>
+                        <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="size-5 text-red-600" />
-                    <div>
-                      <p className="text-sm text-slate-600">Overload Events</p>
-                      <p className="text-2xl">{simulation.stats.overloadEvents.toLocaleString()}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="size-5 text-green-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Renewable Share</p>
+                        <p className="text-2xl">{simulation.stats.renewableShare.toFixed(1)}%</p>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="size-5 text-emerald-600" />
-                    <div>
-                      <p className="text-sm text-slate-600">Latest Electricity Price</p>
-                      <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <DollarSign className="size-5 text-emerald-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Latest Electricity Price</p>
+                        <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              </div>
+                  </Card>
+                </div>
+              )}
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <Card className="p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Flame className="size-5 text-red-600" />
-                    <div>
-                      <h3>Overload Timeline</h3>
-                      <p className="text-sm text-slate-600">
-                        Total: {simulation.stats.overloadEvents.toLocaleString()}
-                      </p>
+              {role === "energy-analyst" && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Database className="size-5 text-blue-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Processed Records</p>
+                        <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                  <ScrollArea className="h-40">
-                    <div className="space-y-2">
-                      {simulation.stats.overloadTimestamps.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          No overload events detected yet.
-                        </p>
-                      ) : (
-                        simulation.stats.overloadTimestamps.map((timestamp, index) => (
-                          <div
-                            key={`${timestamp}-${index}`}
-                            className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700"
-                          >
-                            {timestamp}
-                          </div>
-                        ))
-                      )}
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="size-5 text-red-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Overload Events</p>
+                        <p className="text-2xl">{simulation.stats.overloadEvents.toLocaleString()}</p>
+                      </div>
                     </div>
-                  </ScrollArea>
-                </Card>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <TriangleAlert className="size-5 text-orange-500" />
+                      <div>
+                        <p className="text-sm text-slate-600">Transformer Faults</p>
+                        <p className="text-2xl">{simulation.stats.transformerFaults.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
 
-                <Card className="p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <TriangleAlert className="size-5 text-orange-500" />
-                    <div>
-                      <h3>Transformer Fault Timeline</h3>
-                      <p className="text-sm text-slate-600">
-                        Total: {simulation.stats.transformerFaults.toLocaleString()}
-                      </p>
+              {role === "system-admin" && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Database className="size-5 text-blue-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Processed Records</p>
+                        <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                  <ScrollArea className="h-40">
-                    <div className="space-y-2">
-                      {simulation.stats.transformerFaultTimestamps.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          No transformer faults detected yet.
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <DollarSign className="size-5 text-emerald-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Latest Electricity Price</p>
+                        <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="size-5 text-green-600" />
+                      <div>
+                        <p className="text-sm text-slate-600">Renewable Share</p>
+                        <p className="text-2xl">{simulation.stats.renewableShare.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* Fault timelines: only relevant to Maintenance & Asset Manager */}
+              {role === "energy-analyst" && (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <Card className="p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Flame className="size-5 text-red-600" />
+                      <div>
+                        <h3>Overload Timeline</h3>
+                        <p className="text-sm text-slate-600">
+                          Total: {simulation.stats.overloadEvents.toLocaleString()}
                         </p>
-                      ) : (
-                        simulation.stats.transformerFaultTimestamps.map((timestamp, index) => (
-                          <div
-                            key={`${timestamp}-${index}`}
-                            className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-700"
-                          >
-                            {timestamp}
-                          </div>
-                        ))
-                      )}
+                      </div>
                     </div>
-                  </ScrollArea>
-                </Card>
-              </div>
+                    <ScrollArea className="h-40">
+                      <div className="space-y-2">
+                        {simulation.stats.overloadTimestamps.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            No overload events detected yet.
+                          </p>
+                        ) : (
+                          simulation.stats.overloadTimestamps.map((timestamp, index) => (
+                            <div
+                              key={`${timestamp}-${index}`}
+                              className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700"
+                            >
+                              {timestamp}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </Card>
+
+                  <Card className="p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <TriangleAlert className="size-5 text-orange-500" />
+                      <div>
+                        <h3>Transformer Fault Timeline</h3>
+                        <p className="text-sm text-slate-600">
+                          Total: {simulation.stats.transformerFaults.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <ScrollArea className="h-40">
+                      <div className="space-y-2">
+                        {simulation.stats.transformerFaultTimestamps.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            No transformer faults detected yet.
+                          </p>
+                        ) : (
+                          simulation.stats.transformerFaultTimestamps.map((timestamp, index) => (
+                            <div
+                              key={`${timestamp}-${index}`}
+                              className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-700"
+                            >
+                              {timestamp}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </Card>
+                </div>
+              )}
 
               {selectedCharts.length === 0 ? (
                 <Card className="p-12 text-center">
@@ -262,6 +361,12 @@ export function Dashboard() {
                       data={simulation.energyDistributionData}
                       renewableShare={simulation.stats.renewableShare}
                     />
+                  )}
+                  {selectedCharts.includes("fluctuation") && (
+                    <FluctuationChart data={simulation.fluctuationData} />
+                  )}
+                  {selectedCharts.includes("risk-index") && (
+                    <RiskIndexChart data={simulation.riskIndexData} />
                   )}
                 </div>
               )}
