@@ -67,6 +67,18 @@ export type FaultEvent = {
   value: number;
 };
 
+export type FluctuationPoint = {
+  time: string;
+  timestamp: string;
+  voltageFluctuation: number;
+};
+
+export type RiskPoint = {
+  time: string;
+  timestamp: string;
+  riskIndex: number;
+};
+
 const TIMESTAMP_FORMAT = "M/d/yyyy H:mm";
 
 const CSV_COLUMN_MAP = {
@@ -282,4 +294,32 @@ export function getSimulationStats(records: SmartGridRecord[]) {
     transformerFaultTimestamps: totals.transformerFaultTimestamps,
     latestPrice: Number(records[records.length - 1].electricityPrice.toFixed(3)),
   };
+}
+
+export function buildFluctuationData(records: SmartGridRecord[]): FluctuationPoint[] {
+  return records.slice(-48).map((record) => ({
+    time: format(parseTimestamp(record.timestamp), "HH:mm"),
+    timestamp: record.timestamp,
+    voltageFluctuation: Number(record.voltageFluctuation.toFixed(2)),
+  }));
+}
+
+const RISK_WINDOW = 20;
+
+export function buildRiskIndexData(records: SmartGridRecord[]): RiskPoint[] {
+  const slice = records.slice(-48);
+  return slice.map((record, index, array) => {
+    const windowStart = Math.max(0, index - RISK_WINDOW + 1);
+    const window = array.slice(windowStart, index + 1);
+    const faultCount = window.reduce(
+      (sum, r) => sum + r.overloadCondition + r.transformerFault,
+      0
+    );
+    const riskIndex = Number(((faultCount / (window.length * 2)) * 100).toFixed(1));
+    return {
+      time: format(parseTimestamp(record.timestamp), "HH:mm"),
+      timestamp: record.timestamp,
+      riskIndex,
+    };
+  });
 }

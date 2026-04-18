@@ -9,9 +9,11 @@ import {
 } from "../lib/smartGridDb";
 import {
   buildEnergyDistributionData,
+  buildFluctuationData,
   buildGridLoadData,
   buildPowerConsumptionData,
   buildRenewableEnergyData,
+  buildRiskIndexData,
   getSimulationStats,
   parseSmartGridCsv,
   type SimulationSession,
@@ -222,6 +224,14 @@ export function useSmartGridSimulation() {
     () => buildEnergyDistributionData(processedRows),
     [processedRows]
   );
+  const fluctuationData = useMemo(
+    () => buildFluctuationData(processedRows),
+    [processedRows]
+  );
+  const riskIndexData = useMemo(
+    () => buildRiskIndexData(processedRows),
+    [processedRows]
+  );
   const stats = useMemo(() => getSimulationStats(processedRows), [processedRows]);
   const assistantContext = useMemo(
     () =>
@@ -239,8 +249,10 @@ export function useSmartGridSimulation() {
     chatSessionKey,
     error,
     fileName,
+    fluctuationData,
     gridLoadData,
     energyDistributionData,
+    riskIndexData,
     isLoading,
     isUploading,
     pause,
