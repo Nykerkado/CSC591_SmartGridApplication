@@ -8,6 +8,7 @@ import type { SimulationStatus } from "../lib/smartGrid";
 type SimulationControlsProps = {
   error?: string;
   fileName: string;
+  hasLoadedAnalytics?: boolean;
   isUploading?: boolean;
   onPause: () => void;
   onReset: () => void | Promise<void>;
@@ -23,6 +24,7 @@ type SimulationControlsProps = {
 export function SimulationControls({
   error,
   fileName,
+  hasLoadedAnalytics = false,
   isUploading = false,
   onPause,
   onReset,
@@ -53,11 +55,13 @@ export function SimulationControls({
 
   const statusLabel =
     status === "running"
-      ? "Simulation Running"
+      ? "Loading Backend Analytics"
       : status === "paused"
-      ? "Simulation Paused"
+      ? "Backend Analytics Paused"
       : status === "completed"
-      ? "Simulation Completed"
+      ? "Backend Analytics Loaded"
+      : totalRows > 0
+      ? "CSV Uploaded to Backend"
       : "Ready to Start";
 
   const statusDotClass =
@@ -115,10 +119,10 @@ export function SimulationControls({
             <Button
               size="sm"
               onClick={status === "idle" ? onStart : onResume}
-              disabled={totalRows === 0 || progress === 100}
+              disabled={totalRows === 0 || (status === "paused" && hasLoadedAnalytics)}
             >
               <Play className="size-4 mr-2" />
-              {status === "idle" ? "Start" : "Resume"}
+              {status === "idle" ? "Load Analytics" : "Resume"}
             </Button>
           ) : status === "completed" ? (
             <Button size="sm" disabled>

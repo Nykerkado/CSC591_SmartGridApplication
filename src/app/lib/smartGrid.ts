@@ -70,13 +70,20 @@ export type FaultEvent = {
 export type FluctuationPoint = {
   time: string;
   timestamp: string;
-  voltageFluctuation: number;
+  avgReactivePower: number;
+  avgVoltageFluctuation: number;
+  fluctuationScore: number;
+  overloadCount: number;
+  transformerFaultCount: number;
 };
 
 export type RiskPoint = {
   time: string;
   timestamp: string;
+  overloadFrequency: number;
+  riskLevel: "low" | "medium" | "high";
   riskIndex: number;
+  transformerFaultFrequency: number;
 };
 
 const TIMESTAMP_FORMAT = "M/d/yyyy H:mm";

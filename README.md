@@ -2,6 +2,12 @@
 
 Smart Grid Monitoring Application with grounded OpenAI Q&A.
 
+## Architecture note
+
+- Current state: dashboard simulation and analytics are still largely frontend-driven.
+- Target state: ingestion, cleaning, aggregation, fluctuation analytics, and risk scoring move to the backend.
+- Design document: `docs/backend-architecture.md`
+
 ## Local setup
 
 1. Install dependencies:
