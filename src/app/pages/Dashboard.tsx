@@ -55,9 +55,30 @@ const ROLE_DEFAULT_CHARTS: Record<DashboardRole, ChartType[]> = {
 };
 
 const ROLE_AVAILABLE_CHARTS: Record<DashboardRole, ChartType[]> = {
-  "grid-operator": ["power-consumption", "renewable-energy", "grid-load", "energy-distribution"],
-  "energy-analyst": ["power-consumption", "fluctuation", "risk-index", "grid-load"],
-  "system-admin": ["energy-distribution", "renewable-energy", "grid-load", "power-consumption"],
+  "grid-operator": [
+    "power-consumption",
+    "renewable-energy",
+    "grid-load",
+    "energy-distribution",
+    "fluctuation",
+    "risk-index",
+  ],
+  "energy-analyst": [
+    "power-consumption",
+    "renewable-energy",
+    "grid-load",
+    "energy-distribution",
+    "fluctuation",
+    "risk-index",
+  ],
+  "system-admin": [
+    "power-consumption",
+    "renewable-energy",
+    "grid-load",
+    "energy-distribution",
+    "fluctuation",
+    "risk-index",
+  ],
 };
 
 export function Dashboard() {
@@ -163,6 +184,7 @@ export function Dashboard() {
               <SimulationControls
                 error={simulation.error}
                 fileName={simulation.fileName}
+                hasLoadedAnalytics={simulation.hasBackendData}
                 isUploading={simulation.isUploading}
                 onPause={simulation.pause}
                 onReset={simulation.reset}
