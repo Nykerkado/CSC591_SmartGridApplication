@@ -1,133 +1,202 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { buildAssistantContext } from "../lib/assistantContext";
+import { useEffect, useMemo, useState } from "react";
+import type { AssistantContext } from "../../shared/chat";
 import {
-  appendRecords,
-  clearSimulationDatabase,
-  loadRecords,
-  loadSession,
-  saveSession,
-} from "../lib/smartGridDb";
-import {
-  buildEnergyDistributionData,
-  buildFluctuationData,
-  buildGridLoadData,
-  buildPowerConsumptionData,
-  buildRenewableEnergyData,
-  buildRiskIndexData,
-  getSimulationStats,
-  parseSmartGridCsv,
-  type SimulationSession,
-  type SimulationStatus,
-  type SmartGridRecord,
+  fetchDashboardSummary,
+  fetchJob,
+  ingestCsvFile,
+  type BackendJob,
+  type BackendSummary,
+} from "../lib/backendClient";
+import type {
+  FluctuationPoint,
+  GridLoadPoint,
+  PowerPoint,
+  RenewablePoint,
+  RiskPoint,
+  SimulationStatus,
+  SourcePoint,
 } from "../lib/smartGrid";
 
-const BATCH_SIZE = 1;
-const STREAM_INTERVAL_MS = 250;
+type SimulationStats = {
+  latestPrice: number;
+  overloadEvents: number;
+  overloadTimestamps: string[];
+  renewableShare: number;
+  transformerFaultTimestamps: string[];
+  transformerFaults: number;
+};
+
+function buildEmptyAssistantContext(): AssistantContext {
+  return {
+    meta: {
+      endTimestamp: null,
+      fileName: "",
+      latestTimestamp: null,
+      processedCount: 0,
+      progress: 0,
+      startTimestamp: null,
+      status: "idle",
+      totalRows: 0,
+    },
+    kpis: {
+      latestPrice: 0,
+      overloadEvents: 0,
+      renewableShare: 0,
+      transformerFaults: 0,
+    },
+    power: {
+      averageConsumption: 0,
+      forecastGap: {
+        averageAbsoluteGap: 0,
+        averageSignedGap: 0,
+        maximumAbsoluteGap: { timestamp: null, value: 0 },
+      },
+      maxConsumption: { timestamp: null, value: 0 },
+      minConsumption: { timestamp: null, value: 0 },
+      peakDemand: { timestamp: null, value: 0 },
+    },
+    price: {
+      average: 0,
+      latest: 0,
+      max: 0,
+      min: 0,
+    },
+    renewables: {
+      bestSolarPeriod: { timestamp: null, value: 0 },
+      bestWindPeriod: { timestamp: null, value: 0 },
+      solarTotal: 0,
+      windTotal: 0,
+    },
+    grid: {
+      averageCapacity: 0,
+      averageLoad: 0,
+      minimumHeadroom: { timestamp: null, value: 0 },
+      peakDemandWindow: {
+        capacity: 0,
+        headroom: 0,
+        load: 0,
+        timestamp: null,
+      },
+    },
+    faults: {
+      recentOverloadTimestamps: [],
+      recentTransformerFaultTimestamps: [],
+    },
+    series: {
+      energyDistribution: [],
+      gridLoad: [],
+      powerConsumption: [],
+      renewableEnergy: [],
+    },
+  };
+}
+
+function buildEmptyStats(): SimulationStats {
+  return {
+    latestPrice: 0,
+    overloadEvents: 0,
+    overloadTimestamps: [],
+    renewableShare: 0,
+    transformerFaultTimestamps: [],
+    transformerFaults: 0,
+  };
+}
 
 export function useSmartGridSimulation() {
   const [status, setStatus] = useState<SimulationStatus>("idle");
-  const [uploadedRows, setUploadedRows] = useState<SmartGridRecord[]>([]);
-  const [processedRows, setProcessedRows] = useState<SmartGridRecord[]>([]);
-  const [fileName, setFileName] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [chatSessionKey, setChatSessionKey] = useState(0);
-  const processedCountRef = useRef(0);
-  const rowsRef = useRef<SmartGridRecord[]>([]);
-  const rawCsvRef = useRef("");
+  const [job, setJob] = useState<BackendJob | null>(null);
+  const [assistantContext, setAssistantContext] = useState<AssistantContext>(
+    buildEmptyAssistantContext()
+  );
+  const [stats, setStats] = useState<SimulationStats>(buildEmptyStats());
+  const [powerConsumptionData, setPowerConsumptionData] = useState<PowerPoint[]>([]);
+  const [renewableEnergyData, setRenewableEnergyData] = useState<RenewablePoint[]>([]);
+  const [gridLoadData, setGridLoadData] = useState<GridLoadPoint[]>([]);
+  const [energyDistributionData, setEnergyDistributionData] = useState<SourcePoint[]>([]);
+  const [fluctuationData, setFluctuationData] = useState<FluctuationPoint[]>([]);
+  const [riskIndexData, setRiskIndexData] = useState<RiskPoint[]>([]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function restoreSession() {
-      try {
-        const [session, records] = await Promise.all([loadSession(), loadRecords()]);
-
-        if (cancelled || !session) {
-          return;
-        }
-
-        const rows = parseSmartGridCsv(session.sourceCsv);
-        rawCsvRef.current = session.sourceCsv;
-        rowsRef.current = rows;
-        processedCountRef.current = session.processedCount;
-        setUploadedRows(rows);
-        setProcessedRows(records);
-        setFileName(session.fileName);
-        setStatus(session.status);
-      } catch (restoreError) {
-        console.error("Failed to restore simulation session", restoreError);
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    restoreSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (status !== "running") {
+    if (!job || status !== "running") {
       return;
     }
 
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const [nextJob, summary] = await Promise.all([
+          fetchJob(job.id),
+          fetchDashboardSummary(job.id),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setJob(nextJob);
+        applySummary(summary);
+
+        if (nextJob.status === "completed") {
+          setStatus("completed");
+          return;
+        }
+
+        if (nextJob.status === "failed") {
+          setStatus("idle");
+          setError(nextJob.errorMessage ?? "Backend processing failed.");
+          return;
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          const message =
+            pollError instanceof Error
+              ? pollError.message
+              : "Unable to poll backend analytics.";
+          setError(message);
+          setStatus("idle");
+        }
+      }
+    }
+
+    void poll();
     const intervalId = window.setInterval(() => {
-      const nextBatch = rowsRef.current.slice(
-        processedCountRef.current,
-        processedCountRef.current + BATCH_SIZE
-      );
-
-      if (nextBatch.length === 0) {
-        setStatus("completed");
-        return;
-      }
-
-      processedCountRef.current += nextBatch.length;
-      setProcessedRows((current) => {
-        const updated = [...current, ...nextBatch];
-        void appendRecords(nextBatch);
-        void saveSession({
-          id: "current",
-          fileName,
-          totalRows: rowsRef.current.length,
-          processedCount: processedCountRef.current,
-          status:
-            processedCountRef.current >= rowsRef.current.length ? "completed" : "running",
-          uploadedAt: new Date().toISOString(),
-          sourceCsv: rawCsvRef.current,
-        });
-        return updated;
-      });
-
-      if (processedCountRef.current >= rowsRef.current.length) {
-        setStatus("completed");
-      }
-    }, STREAM_INTERVAL_MS);
+      void poll();
+    }, 500);
 
     return () => {
+      cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [fileName, status]);
+  }, [job, status]);
 
-  useEffect(() => {
-    if (!isLoading && fileName) {
-      void saveSession({
-        id: "current",
-        fileName,
-        totalRows: uploadedRows.length,
-        processedCount: processedRows.length,
-        status,
-        uploadedAt: new Date().toISOString(),
-        sourceCsv: rawCsvRef.current,
-      });
-    }
-  }, [fileName, isLoading, processedRows.length, status, uploadedRows.length]);
+  async function hydrateSummary(jobId: string) {
+    const summary = await fetchDashboardSummary(jobId);
+    applySummary(summary);
+  }
+
+  function applySummary(summary: BackendSummary) {
+    setAssistantContext(summary.assistantContext);
+    setStats({
+      latestPrice: summary.kpis.latestPrice,
+      overloadEvents: summary.kpis.overloadEvents,
+      overloadTimestamps: summary.assistantContext.faults.recentOverloadTimestamps,
+      renewableShare: summary.kpis.renewableShare,
+      transformerFaultTimestamps: summary.assistantContext.faults.recentTransformerFaultTimestamps,
+      transformerFaults: summary.kpis.transformerFaults,
+    });
+    setPowerConsumptionData(summary.series.powerConsumption);
+    setRenewableEnergyData(summary.series.renewableEnergy);
+    setGridLoadData(summary.series.gridLoad);
+    setEnergyDistributionData(summary.series.energyDistribution);
+    setFluctuationData(summary.series.fluctuation);
+    setRiskIndexData(summary.series.riskIndex);
+  }
 
   async function uploadFile(file: File) {
     setIsUploading(true);
@@ -135,31 +204,20 @@ export function useSmartGridSimulation() {
     setChatSessionKey((current) => current + 1);
 
     try {
-      const rawCsv = await file.text();
-      const parsedRows = parseSmartGridCsv(rawCsv);
+      const ingestResult = await ingestCsvFile(file);
+      const uploadedJob = await fetchJob(ingestResult.jobId);
 
-      if (parsedRows.length === 0) {
-        throw new Error("The uploaded CSV did not contain any data rows.");
-      }
-
-      rawCsvRef.current = rawCsv;
-      rowsRef.current = parsedRows;
-      processedCountRef.current = 0;
-      setUploadedRows(parsedRows);
-      setProcessedRows([]);
       setFileName(file.name);
+      setJob(uploadedJob);
       setStatus("idle");
-
-      await clearSimulationDatabase();
-      await saveSession({
-        id: "current",
-        fileName: file.name,
-        totalRows: parsedRows.length,
-        processedCount: 0,
-        status: "idle",
-        uploadedAt: new Date().toISOString(),
-        sourceCsv: rawCsv,
-      });
+      setAssistantContext(buildEmptyAssistantContext());
+      setStats(buildEmptyStats());
+      setPowerConsumptionData([]);
+      setRenewableEnergyData([]);
+      setGridLoadData([]);
+      setEnergyDistributionData([]);
+      setFluctuationData([]);
+      setRiskIndexData([]);
     } catch (uploadError) {
       const message =
         uploadError instanceof Error ? uploadError.message : "Unable to upload the CSV file.";
@@ -169,13 +227,9 @@ export function useSmartGridSimulation() {
     }
   }
 
-  function start() {
-    if (rowsRef.current.length === 0) {
-      setError("Upload a CSV file before starting the simulation.");
-      return;
-    }
-
-    if (processedCountRef.current >= rowsRef.current.length) {
+  async function start() {
+    if (!job) {
+      setError("Upload a CSV file before loading backend analytics.");
       return;
     }
 
@@ -184,88 +238,67 @@ export function useSmartGridSimulation() {
   }
 
   function pause() {
-    setStatus("paused");
+    setStatus((current) => (current === "running" ? "paused" : current));
   }
 
-  function resume() {
-    if (processedCountRef.current < rowsRef.current.length) {
-      setStatus("running");
+  async function resume() {
+    if (!job) {
+      return;
     }
+
+    setError("");
+    setStatus("running");
   }
 
   async function reset() {
     setChatSessionKey((current) => current + 1);
     setStatus("idle");
-    setUploadedRows([]);
-    setProcessedRows([]);
-    setFileName("");
     setError("");
-    rowsRef.current = [];
-    rawCsvRef.current = "";
-    processedCountRef.current = 0;
-    await clearSimulationDatabase();
+    setFileName("");
+    setJob(null);
+    setAssistantContext(buildEmptyAssistantContext());
+    setStats(buildEmptyStats());
+    setPowerConsumptionData([]);
+    setRenewableEnergyData([]);
+    setGridLoadData([]);
+    setEnergyDistributionData([]);
+    setFluctuationData([]);
+    setRiskIndexData([]);
   }
 
+  const processedCount = job?.rowsProcessed ?? 0;
+  const totalRows = job?.rowsReceived ?? 0;
   const progress =
-    uploadedRows.length === 0
-      ? 0
-      : Math.round((processedRows.length / uploadedRows.length) * 100);
+    totalRows === 0 ? 0 : Math.round((processedCount / totalRows) * 100);
 
-  const powerConsumptionData = useMemo(
-    () => buildPowerConsumptionData(processedRows),
-    [processedRows]
-  );
-  const renewableEnergyData = useMemo(
-    () => buildRenewableEnergyData(processedRows),
-    [processedRows]
-  );
-  const gridLoadData = useMemo(() => buildGridLoadData(processedRows), [processedRows]);
-  const energyDistributionData = useMemo(
-    () => buildEnergyDistributionData(processedRows),
-    [processedRows]
-  );
-  const fluctuationData = useMemo(
-    () => buildFluctuationData(processedRows),
-    [processedRows]
-  );
-  const riskIndexData = useMemo(
-    () => buildRiskIndexData(processedRows),
-    [processedRows]
-  );
-  const stats = useMemo(() => getSimulationStats(processedRows), [processedRows]);
-  const assistantContext = useMemo(
-    () =>
-      buildAssistantContext({
-        fileName,
-        processedRows,
-        status,
-        totalRows: uploadedRows.length,
-      }),
-    [fileName, processedRows, status, uploadedRows.length]
+  const hasBackendData = useMemo(
+    () => powerConsumptionData.length > 0 || fluctuationData.length > 0 || riskIndexData.length > 0,
+    [fluctuationData.length, powerConsumptionData.length, riskIndexData.length]
   );
 
   return {
     assistantContext,
     chatSessionKey,
+    energyDistributionData,
     error,
     fileName,
     fluctuationData,
     gridLoadData,
-    energyDistributionData,
-    riskIndexData,
+    hasBackendData,
     isLoading,
     isUploading,
     pause,
     powerConsumptionData,
-    processedCount: processedRows.length,
+    processedCount,
     progress,
     renewableEnergyData,
     reset,
     resume,
+    riskIndexData,
     start,
     stats,
     status,
-    totalRows: uploadedRows.length,
+    totalRows,
     uploadFile,
   };
 }

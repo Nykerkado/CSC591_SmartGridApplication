@@ -19,6 +19,13 @@ type RiskIndexChartProps = {
 
 export function RiskIndexChart({ data }: RiskIndexChartProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const latestRisk = data.at(-1);
+  const latestRiskColor =
+    latestRisk?.riskLevel === "high"
+      ? "text-red-600"
+      : latestRisk?.riskLevel === "medium"
+      ? "text-amber-600"
+      : "text-emerald-600";
 
   return (
     <Card className="p-6">
@@ -26,7 +33,7 @@ export function RiskIndexChart({ data }: RiskIndexChartProps) {
         <ShieldAlert className="size-5 text-red-600" />
         <div>
           <h3>Risk Index</h3>
-          <p className="text-sm text-slate-600">Rolling fault &amp; overload risk (0–100)</p>
+          <p className="text-sm text-slate-600">Backend-derived composite risk score (0-100)</p>
         </div>
         <div className="relative ml-auto">
           <button
@@ -39,9 +46,9 @@ export function RiskIndexChart({ data }: RiskIndexChartProps) {
           </button>
           {showInfo && (
             <div className="absolute right-0 top-6 z-50 w-64 rounded-md bg-slate-800 text-white text-xs p-3 shadow-lg leading-relaxed">
-              A derived score (0–100) calculated from the frequency of overload and transformer
-              fault events in the last 20 records. Higher values indicate more recent faults.
-              Medium risk starts at 25; high risk starts at 50.
+              The backend computes this risk score from overload frequency, transformer fault
+              frequency, and normalized fluctuation over the recent time window. The API also
+              returns a risk level for each point.
             </div>
           )}
         </div>
@@ -57,15 +64,20 @@ export function RiskIndexChart({ data }: RiskIndexChartProps) {
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="time" />
           <YAxis domain={[0, 100]} />
-          <Tooltip formatter={(value: number) => [value, "Risk Index"]} />
+          <Tooltip
+            formatter={(value: number, name: string) => {
+              if (name === "Risk Index") return [value, name];
+              return [`${value}`, name];
+            }}
+          />
           <ReferenceLine
-            y={25}
+            y={34}
             stroke="#f59e0b"
             strokeDasharray="4 4"
             label={{ value: "Medium", position: "right", fontSize: 11 }}
           />
           <ReferenceLine
-            y={50}
+            y={67}
             stroke="#ef4444"
             strokeDasharray="4 4"
             label={{ value: "High", position: "right", fontSize: 11 }}
@@ -82,9 +94,25 @@ export function RiskIndexChart({ data }: RiskIndexChartProps) {
           />
         </AreaChart>
       </ResponsiveContainer>
+      {latestRisk ? (
+        <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+          <div className="rounded-lg bg-slate-100 px-3 py-2">
+            <p className="text-slate-500">Latest Risk</p>
+            <p>{latestRisk.riskIndex}</p>
+          </div>
+          <div className="rounded-lg bg-slate-100 px-3 py-2">
+            <p className="text-slate-500">Risk Level</p>
+            <p className={latestRiskColor}>{latestRisk.riskLevel}</p>
+          </div>
+          <div className="rounded-lg bg-slate-100 px-3 py-2">
+            <p className="text-slate-500">Overload Freq</p>
+            <p>{latestRisk.overloadFrequency}</p>
+          </div>
+        </div>
+      ) : null}
       {data.length === 0 && (
         <p className="text-center text-sm text-slate-500 mt-4">
-          Start the simulation to see risk data.
+          Start the simulation to see backend risk analytics.
         </p>
       )}
     </Card>

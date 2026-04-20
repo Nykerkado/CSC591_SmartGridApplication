@@ -11,12 +11,32 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { Activity, Info } from "lucide-react";
+import { Activity, AlertTriangle, Info, TriangleAlert } from "lucide-react";
 import type { FluctuationPoint } from "../lib/smartGrid";
+import type { DotProps } from "recharts";
 
 type FluctuationChartProps = {
   data: FluctuationPoint[];
 };
+
+function EventMarker({
+  color,
+  cx,
+  cy,
+  dataKey,
+  payload,
+}: DotProps & { color: string; dataKey: "overloadCount" | "transformerFaultCount" }) {
+  if (
+    typeof cx !== "number" ||
+    typeof cy !== "number" ||
+    !payload ||
+    !(payload as FluctuationPoint)[dataKey]
+  ) {
+    return null;
+  }
+
+  return <circle cx={cx} cy={cy} r={5} fill={color} stroke="white" strokeWidth={2} />;
+}
 
 export function FluctuationChart({ data }: FluctuationChartProps) {
   const [showInfo, setShowInfo] = useState(false);
@@ -26,8 +46,8 @@ export function FluctuationChart({ data }: FluctuationChartProps) {
       <div className="flex items-center gap-2 mb-6">
         <Activity className="size-5 text-yellow-500" />
         <div>
-          <h3>Voltage Fluctuation</h3>
-          <p className="text-sm text-slate-600">Voltage deviation over time (%)</p>
+          <h3>Fluctuation Score</h3>
+          <p className="text-sm text-slate-600">Backend-derived grid instability score by time window</p>
         </div>
         <div className="relative ml-auto">
           <button
@@ -40,9 +60,9 @@ export function FluctuationChart({ data }: FluctuationChartProps) {
           </button>
           {showInfo && (
             <div className="absolute right-0 top-6 z-50 w-64 rounded-md bg-slate-800 text-white text-xs p-3 shadow-lg leading-relaxed">
-              Shows how much the grid voltage is deviating from its normal level over time.
-              A warning threshold is set at 5% and a critical threshold at 10%.
-              Sustained high fluctuation can stress equipment and signal instability.
+              The backend aggregates each time window and computes a fluctuation score from
+              average voltage fluctuation, reactive power, and power-factor drop. Fault and
+              overload markers show windows with abnormal events.
             </div>
           )}
         </div>
@@ -51,35 +71,84 @@ export function FluctuationChart({ data }: FluctuationChartProps) {
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="time" />
-          <YAxis unit="%" />
-          <Tooltip formatter={(value: number) => [`${value}%`, "Fluctuation"]} />
+          <YAxis domain={[0, 100]} />
+          <Tooltip
+            formatter={(value: number, name: string) => {
+              if (name === "Fluctuation Score") return [value, name];
+              if (name === "Avg Voltage Fluctuation") return [`${value}%`, name];
+              return [value, name];
+            }}
+          />
           <Legend />
           <ReferenceLine
-            y={5}
+            y={40}
             stroke="#f59e0b"
             strokeDasharray="4 4"
-            label={{ value: "Warn 5%", position: "right", fontSize: 11 }}
+            label={{ value: "Watch 40", position: "right", fontSize: 11 }}
           />
           <ReferenceLine
-            y={10}
+            y={70}
             stroke="#ef4444"
             strokeDasharray="4 4"
-            label={{ value: "Critical 10%", position: "right", fontSize: 11 }}
+            label={{ value: "Critical 70", position: "right", fontSize: 11 }}
           />
           <Line
             type="monotone"
-            dataKey="voltageFluctuation"
+            dataKey="fluctuationScore"
             stroke="#f59e0b"
             strokeWidth={2}
-            name="Voltage Fluctuation"
+            name="Fluctuation Score"
             dot={false}
             activeDot={{ r: 5 }}
           />
+          <Line
+            type="monotone"
+            dataKey="fluctuationScore"
+            stroke="transparent"
+            name="Overload Event"
+            legendType="circle"
+            dot={<EventMarker color="#dc2626" dataKey="overloadCount" />}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="fluctuationScore"
+            stroke="transparent"
+            name="Transformer Fault Event"
+            legendType="circle"
+            dot={<EventMarker color="#f97316" dataKey="transformerFaultCount" />}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="avgVoltageFluctuation"
+            stroke="#64748b"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            name="Avg Voltage Fluctuation"
+            dot={false}
+          />
         </LineChart>
       </ResponsiveContainer>
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-600">
+        <div className="flex items-center gap-1">
+          <AlertTriangle className="size-3 text-red-600" />
+          <span>
+            Overload windows: {data.reduce((sum, point) => sum + (point.overloadCount > 0 ? 1 : 0), 0)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <TriangleAlert className="size-3 text-orange-500" />
+          <span>
+            Fault windows: {data.reduce((sum, point) => sum + (point.transformerFaultCount > 0 ? 1 : 0), 0)}
+          </span>
+        </div>
+      </div>
       {data.length === 0 && (
         <p className="text-center text-sm text-slate-500 mt-4">
-          Start the simulation to see fluctuation data.
+          Start the simulation to see backend fluctuation analytics.
         </p>
       )}
     </Card>

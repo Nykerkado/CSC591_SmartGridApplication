@@ -1,8 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
+import { handleJobRequest } from "./jobs/jobRoutes.js";
 import { chatQueryRequestSchema } from "./chatSchemas.js";
 import { createOpenAIClientFromEnv, queryGroundedChat, type OpenAIClientLike } from "./chatService.js";
+import { handleAnalyticsRequest } from "./analytics/analyticsRoutes.js";
+import { handleIngestRequest } from "./ingest/ingestRoutes.js";
 import { loadLocalEnv } from "./loadEnv.js";
+import { handleHealthRequest, type ApiResponse } from "./routes/healthRoutes.js";
 
 loadLocalEnv();
 
@@ -14,11 +18,6 @@ type ApiRequest = {
   body?: unknown;
   method?: string;
   url?: string;
-};
-
-type ApiResponse = {
-  payload: unknown;
-  statusCode: number;
 };
 
 function sendJson(response: ServerResponse, statusCode: number, payload: unknown) {
@@ -50,6 +49,25 @@ export async function handleChatApiRequest(
       statusCode: 400,
       payload: { error: "Missing request URL." },
     };
+  }
+
+  if (request.url === "/api/health" && request.method === "GET") {
+    return handleHealthRequest();
+  }
+
+  const ingestResult = await handleIngestRequest(request);
+  if (ingestResult) {
+    return ingestResult;
+  }
+
+  const analyticsResult = await handleAnalyticsRequest(request);
+  if (analyticsResult) {
+    return analyticsResult;
+  }
+
+  const jobResult = await handleJobRequest(request);
+  if (jobResult) {
+    return jobResult;
   }
 
   if (request.url === "/api/chat/query" && request.method === "POST") {
@@ -90,10 +108,7 @@ export function createChatApiServer(dependencies: ServerDependencies = {}) {
 
   return createServer(async (request, response) => {
     try {
-      const body =
-        request.method === "POST" && request.url === "/api/chat/query"
-          ? await readJsonBody(request)
-          : undefined;
+      const body = request.method === "POST" ? await readJsonBody(request) : undefined;
       const result = await handleChatApiRequest(
         {
           body,
