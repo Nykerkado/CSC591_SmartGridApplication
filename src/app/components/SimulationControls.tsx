@@ -119,7 +119,7 @@ export function SimulationControls({
             <Button
               size="sm"
               onClick={status === "idle" ? onStart : onResume}
-              disabled={totalRows === 0 || (status === "paused" && hasLoadedAnalytics)}
+              disabled={totalRows === 0}
             >
               <Play className="size-4 mr-2" />
               {status === "idle" ? "Load Analytics" : "Resume"}

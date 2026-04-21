@@ -19,6 +19,28 @@ export type SummaryResponse = {
     renewableShare: number;
     transformerFaults: number;
   };
+  rawSensorData: {
+    latest: {
+      current: number;
+      humidity: number;
+      powerConsumption: number;
+      powerFactor: number;
+      reactivePower: number;
+      temperature: number;
+      timestamp: string;
+      voltage: number;
+    } | null;
+    recentMeasurements: Array<{
+      current: number;
+      humidity: number;
+      powerConsumption: number;
+      powerFactor: number;
+      reactivePower: number;
+      temperature: number;
+      timestamp: string;
+      voltage: number;
+    }>;
+  };
   series: {
     energyDistribution: Array<{ color: string; name: string; value: number }>;
     fluctuation: Array<{
@@ -305,6 +327,24 @@ export function buildSummaryKpis(records: RawMeasurementRecord[]) {
 
 function round(value: number, digits = 2) {
   return Number(value.toFixed(digits));
+}
+
+export function buildRawSensorData(records: RawMeasurementRecord[]) {
+  const mapMeasurement = (record: RawMeasurementRecord) => ({
+    current: round(record.current),
+    humidity: round(record.humidity),
+    powerConsumption: round(record.powerConsumption),
+    powerFactor: round(record.powerFactor, 3),
+    reactivePower: round(record.reactivePower),
+    temperature: round(record.temperature),
+    timestamp: record.timestamp,
+    voltage: round(record.voltage),
+  });
+
+  return {
+    latest: records.length > 0 ? mapMeasurement(records[records.length - 1]) : null,
+    recentMeasurements: records.slice(-8).reverse().map(mapMeasurement),
+  };
 }
 
 function buildEmptyPoint() {

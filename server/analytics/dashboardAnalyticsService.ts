@@ -6,6 +6,7 @@ import {
   buildFluctuationSeries,
   buildGridLoadSeries,
   buildPowerConsumptionSeries,
+  buildRawSensorData,
   buildRenewableEnergySeries,
   buildRiskIndexSeries,
   buildSummaryKpis,
@@ -66,6 +67,7 @@ export async function getDashboardSummary(
       status: job.status,
     },
     kpis,
+    rawSensorData: buildRawSensorData(measurements),
     series: {
       energyDistribution: buildEnergyDistributionSeries(measurements),
       fluctuation: buildFluctuationSeries(measurements),

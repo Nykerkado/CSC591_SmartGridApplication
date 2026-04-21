@@ -5,6 +5,7 @@ import {
   fetchJob,
   ingestCsvFile,
   type BackendJob,
+  type RawSensorMeasurement,
   type BackendSummary,
 } from "../lib/backendClient";
 import type {
@@ -102,6 +103,16 @@ function buildEmptyStats(): SimulationStats {
   };
 }
 
+function buildEmptyRawSensorData(): {
+  latest: RawSensorMeasurement | null;
+  recentMeasurements: RawSensorMeasurement[];
+} {
+  return {
+    latest: null,
+    recentMeasurements: [],
+  };
+}
+
 export function useSmartGridSimulation() {
   const [status, setStatus] = useState<SimulationStatus>("idle");
   const [error, setError] = useState("");
@@ -120,6 +131,7 @@ export function useSmartGridSimulation() {
   const [energyDistributionData, setEnergyDistributionData] = useState<SourcePoint[]>([]);
   const [fluctuationData, setFluctuationData] = useState<FluctuationPoint[]>([]);
   const [riskIndexData, setRiskIndexData] = useState<RiskPoint[]>([]);
+  const [rawSensorData, setRawSensorData] = useState(buildEmptyRawSensorData());
 
   useEffect(() => {
     if (!job || status !== "running") {
@@ -196,6 +208,7 @@ export function useSmartGridSimulation() {
     setEnergyDistributionData(summary.series.energyDistribution);
     setFluctuationData(summary.series.fluctuation);
     setRiskIndexData(summary.series.riskIndex);
+    setRawSensorData(summary.rawSensorData);
   }
 
   async function uploadFile(file: File) {
@@ -218,6 +231,7 @@ export function useSmartGridSimulation() {
       setEnergyDistributionData([]);
       setFluctuationData([]);
       setRiskIndexData([]);
+      setRawSensorData(buildEmptyRawSensorData());
     } catch (uploadError) {
       const message =
         uploadError instanceof Error ? uploadError.message : "Unable to upload the CSV file.";
@@ -264,6 +278,7 @@ export function useSmartGridSimulation() {
     setEnergyDistributionData([]);
     setFluctuationData([]);
     setRiskIndexData([]);
+    setRawSensorData(buildEmptyRawSensorData());
   }
 
   const processedCount = job?.rowsProcessed ?? 0;
@@ -291,6 +306,7 @@ export function useSmartGridSimulation() {
     powerConsumptionData,
     processedCount,
     progress,
+    rawSensorData,
     renewableEnergyData,
     reset,
     resume,
