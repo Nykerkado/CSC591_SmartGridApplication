@@ -35,6 +35,10 @@ export type BackendSummary = {
     renewableShare: number;
     transformerFaults: number;
   };
+  rawSensorData: {
+    latest: RawSensorMeasurement | null;
+    recentMeasurements: RawSensorMeasurement[];
+  };
   series: {
     energyDistribution: SourcePoint[];
     fluctuation: FluctuationPoint[];
@@ -43,6 +47,17 @@ export type BackendSummary = {
     renewableEnergy: RenewablePoint[];
     riskIndex: RiskPoint[];
   };
+};
+
+export type RawSensorMeasurement = {
+  current: number;
+  humidity: number;
+  powerConsumption: number;
+  powerFactor: number;
+  reactivePower: number;
+  temperature: number;
+  timestamp: string;
+  voltage: number;
 };
 
 type BackendError = {

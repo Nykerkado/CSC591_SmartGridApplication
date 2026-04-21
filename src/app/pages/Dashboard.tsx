@@ -26,6 +26,7 @@ import { GridLoadChart } from "../components/GridLoadChart";
 import { EnergySourceDistribution } from "../components/EnergySourceDistribution";
 import { FluctuationChart } from "../components/FluctuationChart";
 import { RiskIndexChart } from "../components/RiskIndexChart";
+import { RawSensorDataPanel } from "../components/RawSensorDataPanel";
 import { ChatInterface } from "../components/ChatInterface";
 import { SimulationControls } from "../components/SimulationControls";
 import { useSmartGridSimulation } from "../hooks/useSmartGridSimulation";
@@ -199,34 +200,41 @@ export function Dashboard() {
 
               {/* Role-specific stat cards */}
               {role === "grid-operator" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Database className="size-5 text-blue-600" />
-                      <div>
-                        <p className="text-sm text-slate-600">Processed Records</p>
-                        <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="p-4">
+                      <div className="flex items-center gap-3">
+                        <Database className="size-5 text-blue-600" />
+                        <div>
+                          <p className="text-sm text-slate-600">Processed Records</p>
+                          <p className="text-2xl">{simulation.processedCount.toLocaleString()}</p>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <TrendingUp className="size-5 text-green-600" />
-                      <div>
-                        <p className="text-sm text-slate-600">Renewable Share</p>
-                        <p className="text-2xl">{simulation.stats.renewableShare.toFixed(1)}%</p>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="flex items-center gap-3">
+                        <TrendingUp className="size-5 text-green-600" />
+                        <div>
+                          <p className="text-sm text-slate-600">Renewable Share</p>
+                          <p className="text-2xl">{simulation.stats.renewableShare.toFixed(1)}%</p>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <DollarSign className="size-5 text-emerald-600" />
-                      <div>
-                        <p className="text-sm text-slate-600">Latest Electricity Price</p>
-                        <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="size-5 text-emerald-600" />
+                        <div>
+                          <p className="text-sm text-slate-600">Latest Electricity Price</p>
+                          <p className="text-2xl">${simulation.stats.latestPrice.toFixed(3)}</p>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
+                    </Card>
+                  </div>
+
+                  <RawSensorDataPanel
+                    latest={simulation.rawSensorData.latest}
+                    recentMeasurements={simulation.rawSensorData.recentMeasurements}
+                  />
                 </div>
               )}
 
