@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { handleChatApiRequest } from "./index.js";
 import type { ChatQueryRequest, ChatQueryResponse } from "../src/shared/chat.js";
 
+console.log("\n=== Functional - Chat API ===");
+
 function createBaseRequest(overrides: Partial<ChatQueryRequest> = {}): ChatQueryRequest {
   return {
     role: "grid-operator",
