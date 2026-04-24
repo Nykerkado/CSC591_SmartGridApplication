@@ -9,6 +9,7 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run build && npm run build:server",
     "preview": "vite preview",
     "test": "node --import tsx --test src/**/*.test.ts server/**/*.test.ts",
     "test:perf": "node --import tsx --test server/perf/responseTime.test.ts server/perf/dataAccuracy.test.ts server/perf/uptime.test.ts server/perf/visualizationLoad.test.ts",
