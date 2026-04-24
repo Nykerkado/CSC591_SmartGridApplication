@@ -1,4 +1,7 @@
+import { createReadStream, existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleJobRequest } from "./jobs/jobRoutes.js";
 import { chatQueryRequestSchema } from "./chatSchemas.js";
@@ -20,11 +23,96 @@ type ApiRequest = {
   url?: string;
 };
 
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDirectory = path.dirname(currentFilePath);
+
+function resolveClientDistDirectory() {
+  const candidateProjectRoots = [
+    process.cwd(),
+    path.resolve(currentDirectory, "..", "..", ".."),
+    path.resolve(currentDirectory, "..", ".."),
+  ];
+
+  for (const candidateRoot of candidateProjectRoots) {
+    const candidateDistDirectory = path.join(candidateRoot, "dist");
+    const candidateIndexPath = path.join(candidateDistDirectory, "index.html");
+
+    if (existsSync(candidateIndexPath)) {
+      return {
+        clientDistDirectory: candidateDistDirectory,
+        clientIndexPath: candidateIndexPath,
+      };
+    }
+  }
+
+  const fallbackDistDirectory = path.join(process.cwd(), "dist");
+  return {
+    clientDistDirectory: fallbackDistDirectory,
+    clientIndexPath: path.join(fallbackDistDirectory, "index.html"),
+  };
+}
+
+const { clientDistDirectory, clientIndexPath } = resolveClientDistDirectory();
+
+const STATIC_CONTENT_TYPES: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+};
+
 function sendJson(response: ServerResponse, statusCode: number, payload: unknown) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(payload));
+}
+
+function sendFile(response: ServerResponse, filePath: string) {
+  const extension = path.extname(filePath);
+  const contentType = STATIC_CONTENT_TYPES[extension] ?? "application/octet-stream";
+
+  response.writeHead(200, {
+    "Content-Type": contentType,
+  });
+
+  createReadStream(filePath).pipe(response);
+}
+
+async function tryHandleStaticAsset(request: IncomingMessage, response: ServerResponse) {
+  if (request.method !== "GET" || !request.url || request.url.startsWith("/api")) {
+    return false;
+  }
+
+  const requestUrl = new URL(request.url, "http://localhost");
+  const normalizedPath = decodeURIComponent(requestUrl.pathname);
+  const relativePath = normalizedPath === "/" ? "index.html" : normalizedPath.replace(/^\/+/, "");
+  const assetPath = path.resolve(clientDistDirectory, relativePath);
+
+  if (!assetPath.startsWith(clientDistDirectory)) {
+    response.writeHead(403);
+    response.end("Forbidden");
+    return true;
+  }
+
+  if (existsSync(assetPath)) {
+    const assetStats = await stat(assetPath);
+    if (assetStats.isFile()) {
+      sendFile(response, assetPath);
+      return true;
+    }
+  }
+
+  if (existsSync(clientIndexPath)) {
+    sendFile(response, clientIndexPath);
+    return true;
+  }
+
+  return false;
 }
 
 async function readJsonBody(request: IncomingMessage) {
@@ -108,6 +196,11 @@ export function createChatApiServer(dependencies: ServerDependencies = {}) {
 
   return createServer(async (request, response) => {
     try {
+      const servedStaticAsset = await tryHandleStaticAsset(request, response);
+      if (servedStaticAsset) {
+        return;
+      }
+
       const body = request.method === "POST" ? await readJsonBody(request) : undefined;
       const result = await handleChatApiRequest(
         {
@@ -136,6 +229,11 @@ if (isEntryPoint) {
 
   server.listen(port, () => {
     console.log(`Smart Grid chat API listening on http://localhost:${port}`);
+    if (existsSync(clientIndexPath)) {
+      console.log(`Serving dashboard UI from ${clientDistDirectory}`);
+    } else {
+      console.log("Client build not found. API routes are available, but the dashboard UI is not being served.");
+    }
     if (!process.env.OPENAI_API_KEY) {
       console.log("OPENAI_API_KEY is not set. Chat requests will return a configuration hint.");
     }
