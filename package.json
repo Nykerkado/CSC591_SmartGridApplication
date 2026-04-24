@@ -10,7 +10,10 @@
     "build": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "preview": "vite preview",
-    "test": "node --import tsx --test src/**/*.test.ts server/**/*.test.ts"
+    "test": "node --import tsx --test src/**/*.test.ts server/**/*.test.ts",
+    "test:perf": "node --import tsx --test server/perf/responseTime.test.ts server/perf/dataAccuracy.test.ts server/perf/uptime.test.ts server/perf/visualizationLoad.test.ts",
+    "test:report": "mkdir -p test-results && node --import tsx --test server/chatApi.test.ts server/perf/responseTime.test.ts server/perf/dataAccuracy.test.ts server/perf/uptime.test.ts server/perf/visualizationLoad.test.ts 2>&1 | tee test-results/report.txt",
+    "perf:load": "node --import tsx server/perf/loadTest.ts"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -78,8 +81,10 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
+    "@types/autocannon": "^7.12.7",
     "@types/node": "^25.5.2",
     "@vitejs/plugin-react": "4.7.0",
+    "autocannon": "^8.0.0",
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
     "postcss": "^8.5.8",
