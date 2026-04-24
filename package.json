@@ -9,7 +9,9 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run build && npm run build:server",
     "preview": "vite preview",
+    "start": "node server/dist/server/index.js",
     "test": "node --import tsx --test src/**/*.test.ts server/**/*.test.ts"
   },
   "dependencies": {
