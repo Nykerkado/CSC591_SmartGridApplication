@@ -30,32 +30,56 @@ type Message = {
   unsupportedReason?: string;
 };
 
-const defaultSuggestedQuestions = [
-  "What is the current renewable share?",
-  "When is peak demand so far?",
-  "What is the latest electricity price?",
-  "How many overload events have occurred?",
-  "What is the current minimum headroom?",
-  "How are solar and wind performing?",
-];
+const suggestedQuestionsByRole: Record<DashboardRole, string[]> = {
+  "grid-operator": [
+    "When is peak demand so far, and how much headroom is left?",
+    "What is the current minimum headroom?",
+    "How many overload events have occurred so far?",
+    "At the latest timestamp, how does load compare with capacity?",
+    "What time windows look most operationally risky right now?",
+    "Summarize the current grid status in 3 short points.",
+  ],
+  "energy-analyst": [
+    "How many transformer fault events have occurred so far?",
+    "When were the most recent overload and transformer fault events?",
+    "Which timestamps look most concerning for asset reliability?",
+    "Summarize the recent fault pattern in plain language.",
+    "What is the current minimum headroom, and why does it matter for reliability?",
+    "Are overloads and transformer faults clustered around the same periods?",
+  ],
+  "system-admin": [
+    "What is the latest electricity price?",
+    "What are the minimum, maximum, and average electricity prices so far?",
+    "When is peak demand so far, and what was the electricity price then?",
+    "What is the current renewable share?",
+    "How are solar and wind performing so far?",
+    "Give a short market-focused summary of demand, renewables, and price.",
+  ],
+};
+
+function getSuggestedQuestions(role: DashboardRole) {
+  return suggestedQuestionsByRole[role];
+}
 
 function createWelcomeMessage(role: DashboardRole): Message {
+  const suggestedQuestions = getSuggestedQuestions(role);
+
   return {
     id: "welcome",
     role: "assistant",
     content: `I’m your grounded ${DASHBOARD_ROLE_LABELS[role]} assistant. I only answer from the uploaded smart-grid analytics shown in this dashboard.`,
     timestamp: new Date(),
-    followUps: defaultSuggestedQuestions.slice(0, 3),
+    followUps: suggestedQuestions.slice(0, 3),
   };
 }
 
-function createFallbackMessage(content: string): Message {
+function createFallbackMessage(content: string, role: DashboardRole): Message {
   return {
     id: crypto.randomUUID(),
     role: "assistant",
     content,
     timestamp: new Date(),
-    followUps: defaultSuggestedQuestions.slice(0, 2),
+    followUps: getSuggestedQuestions(role).slice(0, 2),
   };
 }
 
@@ -92,7 +116,7 @@ export function ChatInterface({
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [suggestedQuestions, setSuggestedQuestions] = useState(defaultSuggestedQuestions);
+  const [suggestedQuestions, setSuggestedQuestions] = useState(getSuggestedQuestions(role));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const requestGenerationRef = useRef(0);
 
@@ -106,7 +130,7 @@ export function ChatInterface({
     setInput("");
     setIsTyping(false);
     setShowSuggestions(true);
-    setSuggestedQuestions(defaultSuggestedQuestions);
+    setSuggestedQuestions(getSuggestedQuestions(role));
   }, [role, sessionKey]);
 
   const assistantNote = useMemo(() => {
@@ -164,7 +188,7 @@ export function ChatInterface({
       const assistantMessage = toAssistantMessage(response);
       setMessages((current) => [...current, assistantMessage]);
       setSuggestedQuestions(
-        response.followUps.length > 0 ? response.followUps : defaultSuggestedQuestions
+        response.followUps.length > 0 ? response.followUps : getSuggestedQuestions(role)
       );
     } catch (error) {
       if (generation !== requestGenerationRef.current) {
@@ -175,8 +199,8 @@ export function ChatInterface({
         error instanceof Error
           ? error.message
           : "The assistant is temporarily unavailable. Please try again.";
-      setMessages((current) => [...current, createFallbackMessage(message)]);
-      setSuggestedQuestions(defaultSuggestedQuestions);
+      setMessages((current) => [...current, createFallbackMessage(message, role)]);
+      setSuggestedQuestions(getSuggestedQuestions(role));
     } finally {
       if (generation === requestGenerationRef.current) {
         setIsTyping(false);
